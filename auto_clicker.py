@@ -205,6 +205,7 @@ class AutoClickerPro(ctk.CTk):
         self._record_start = 0
         self._mouse_listener = None
         self._kb_listener = None
+        self._last_move_t = 0
         self.web_driver = None
         self.macro_steps = []
         self.scheduled_tasks = []
@@ -506,12 +507,40 @@ class AutoClickerPro(ctk.CTk):
 
         rec_opt = ctk.CTkFrame(tab)
         rec_opt.pack(fill="x", padx=12, pady=4)
-        self.rec_mouse_var = ctk.BooleanVar(value=True)
+        self.rec_click_var = ctk.BooleanVar(value=True)
+        self.rec_move_var = ctk.BooleanVar(value=False)
+        self.rec_scroll_var = ctk.BooleanVar(value=True)
         self.rec_kb_var = ctk.BooleanVar(value=True)
-        ctk.CTkCheckBox(rec_opt, text="Mouse",
-                        variable=self.rec_mouse_var).pack(side="left", padx=8)
+        ctk.CTkCheckBox(rec_opt, text="Clicks",
+                        variable=self.rec_click_var).pack(side="left", padx=6)
+        ctk.CTkCheckBox(rec_opt, text="Mouse Move",
+                        variable=self.rec_move_var).pack(side="left", padx=6)
+        ctk.CTkCheckBox(rec_opt, text="Scroll",
+                        variable=self.rec_scroll_var).pack(side="left", padx=6)
         ctk.CTkCheckBox(rec_opt, text="Keyboard",
-                        variable=self.rec_kb_var).pack(side="left", padx=8)
+                        variable=self.rec_kb_var).pack(side="left", padx=6)
+
+        # Manual insert buttons
+        insert_f = ctk.CTkFrame(tab)
+        insert_f.pack(fill="x", padx=12, pady=2)
+        ctk.CTkLabel(insert_f, text="Insert:", text_color="gray60").pack(
+            side="left", padx=4)
+        ctk.CTkButton(insert_f, text="+ Wait", width=70,
+                      fg_color="gray30", command=self._rec_insert_wait
+                      ).pack(side="left", padx=3)
+        ctk.CTkButton(insert_f, text="+ Type Text", width=90,
+                      fg_color="gray30", command=self._rec_insert_type
+                      ).pack(side="left", padx=3)
+        ctk.CTkButton(insert_f, text="+ Image Click", width=100,
+                      fg_color="gray30", command=self._rec_insert_image
+                      ).pack(side="left", padx=3)
+        ctk.CTkButton(insert_f, text="+ Scroll", width=80,
+                      fg_color="gray30", command=self._rec_insert_scroll
+                      ).pack(side="left", padx=3)
+        ctk.CTkButton(insert_f, text="Delete Selected", width=110,
+                      fg_color="#7f1d1d", hover_color="#991b1b",
+                      command=self._rec_delete_selected
+                      ).pack(side="right", padx=3)
 
         list_frame = ctk.CTkFrame(tab)
         list_frame.pack(fill="both", expand=True, padx=12, pady=4)
@@ -541,6 +570,14 @@ class AutoClickerPro(ctk.CTk):
             ctrl, values=["0.25x", "0.5x", "1x", "2x", "4x", "8x"], width=70)
         self.replay_speed.set("1x")
         self.replay_speed.pack(side="left", padx=4)
+        ctk.CTkLabel(ctrl, text="Delay:").pack(side="left", padx=(12, 4))
+        self.replay_delay_var = ctk.StringVar(value="0")
+        ctk.CTkEntry(ctrl, textvariable=self.replay_delay_var, width=50).pack(
+            side="left", padx=2)
+        self.replay_delay_unit = ctk.CTkOptionMenu(
+            ctrl, values=["sec", "min", "hr"], width=60)
+        self.replay_delay_unit.set("sec")
+        self.replay_delay_unit.pack(side="left", padx=2)
         ctk.CTkButton(ctrl, text="Save", width=70,
                       command=self._save_recording).pack(side="right", padx=4)
         ctk.CTkButton(ctrl, text="Load", width=70,
@@ -558,46 +595,149 @@ class AutoClickerPro(ctk.CTk):
         self.recorded_events = []
         self.recording = True
         self._record_start = time.time()
+        self._last_move_t = 0
         self.rec_btn.configure(text=f"Stop Recording ({HOTKEY_RECORD})")
         self._log("Recording... Press " + HOTKEY_RECORD + " to stop.")
 
         hotkeys = {HOTKEY_START_STOP.lower(), HOTKEY_RECORD.lower(),
                    HOTKEY_PICK.lower()}
+        rec_clicks = self.rec_click_var.get()
+        rec_moves = self.rec_move_var.get()
+        rec_scroll = self.rec_scroll_var.get()
 
-        if self.rec_mouse_var.get():
-            def on_mouse(x, y, button, pressed):
+        # Mouse listeners
+        if rec_clicks or rec_moves or rec_scroll:
+            self._held_buttons = {}
+
+            def on_click(x, y, button, pressed):
                 if not self.recording:
                     return False
+                if not rec_clicks:
+                    return
+                t = round(time.time() - self._record_start, 3)
+                btn = button.name if hasattr(button, 'name') else str(button)
                 if pressed:
-                    t = round(time.time() - self._record_start, 3)
-                    btn = button.name if hasattr(button, 'name') else str(button)
-                    evt = {"t": t, "type": "mouse_click",
+                    self._held_buttons[btn] = t
+                    evt = {"t": t, "type": "mouse_down",
                            "x": x, "y": y, "button": btn}
                     self.recorded_events.append(evt)
                     self.rec_tree.insert(
                         "", "end",
-                        values=(f"{t}s", "Mouse", f"Click ({x},{y}) {btn}"))
+                        values=(f"{t}s", "Down", f"({x},{y}) {btn}"))
+                else:
+                    down_t = self._held_buttons.pop(btn, t)
+                    hold = round(t - down_t, 3)
+                    evt = {"t": t, "type": "mouse_up",
+                           "x": x, "y": y, "button": btn,
+                           "hold": hold}
+                    self.recorded_events.append(evt)
+                    self.rec_tree.insert(
+                        "", "end",
+                        values=(f"{t}s", "Up",
+                                f"({x},{y}) {btn} held {hold}s"))
 
-            self._mouse_listener = pynput_mouse.Listener(on_click=on_mouse)
+            def on_move(x, y):
+                if not self.recording or not rec_moves:
+                    return
+                now = time.time()
+                if now - self._last_move_t < 0.05:
+                    return
+                self._last_move_t = now
+                t = round(now - self._record_start, 3)
+                evt = {"t": t, "type": "mouse_move", "x": x, "y": y}
+                self.recorded_events.append(evt)
+                self.rec_tree.insert(
+                    "", "end",
+                    values=(f"{t}s", "Move", f"({x},{y})"))
+
+            def on_scroll(x, y, dx, dy):
+                if not self.recording or not rec_scroll:
+                    return
+                t = round(time.time() - self._record_start, 3)
+                evt = {"t": t, "type": "mouse_scroll",
+                       "x": x, "y": y, "dx": dx, "dy": dy}
+                self.recorded_events.append(evt)
+                direction = "up" if dy > 0 else "down"
+                self.rec_tree.insert(
+                    "", "end",
+                    values=(f"{t}s", "Scroll", f"({x},{y}) {direction} {abs(dy)}"))
+
+            self._mouse_listener = pynput_mouse.Listener(
+                on_click=on_click if rec_clicks else None,
+                on_move=on_move if rec_moves else None,
+                on_scroll=on_scroll if rec_scroll else None)
             self._mouse_listener.start()
 
         if self.rec_kb_var.get():
-            def on_key(key):
+            self._held_keys = {}  # vk/name -> key_str
+
+            def _pynput_key_str(key):
+                """Convert pynput key to a stable string name."""
+                # Special keys (ctrl, shift, alt, enter, etc.)
+                if isinstance(key, pynput_kb.Key):
+                    return key.name  # e.g. 'ctrl_l', 'shift', 'space'
+                # Regular keys - prefer vk code (reliable even
+                # when modifiers change the char)
+                vk = getattr(key, 'vk', None)
+                if vk is not None:
+                    if 65 <= vk <= 90:   # A-Z
+                        return chr(vk).lower()
+                    if 48 <= vk <= 57:   # 0-9
+                        return chr(vk)
+                    if 112 <= vk <= 123: # F1-F12
+                        return f"f{vk - 111}"
+                # Fallback to char if printable
+                try:
+                    if key.char is not None and key.char.isprintable():
+                        return key.char
+                except AttributeError:
+                    pass
+                # Last resort
+                if vk is not None:
+                    return f"vk_{vk}"
+                return str(key).replace("'", "")
+
+            def _key_id(key):
+                """Unique ID for dedup (vk code or name)."""
+                if isinstance(key, pynput_kb.Key):
+                    return key.name
+                vk = getattr(key, 'vk', None)
+                return vk if vk is not None else str(key)
+
+            def on_key_press(key):
                 if not self.recording:
                     return False
                 t = round(time.time() - self._record_start, 3)
-                try:
-                    key_str = key.char if key.char else str(key)
-                except AttributeError:
-                    key_str = str(key).replace("Key.", "")
+                key_str = _pynput_key_str(key)
+                kid = _key_id(key)
                 if key_str.lower() in hotkeys:
                     return
-                evt = {"t": t, "type": "key_press", "key": key_str}
+                if kid in self._held_keys:
+                    return
+                self._held_keys[kid] = key_str
+                evt = {"t": t, "type": "key_down", "key": key_str}
                 self.recorded_events.append(evt)
                 self.rec_tree.insert(
-                    "", "end", values=(f"{t}s", "Key", key_str))
+                    "", "end", values=(f"{t}s", "KeyDown", key_str))
 
-            self._kb_listener = pynput_kb.Listener(on_press=on_key)
+            def on_key_release(key):
+                if not self.recording:
+                    return False
+                t = round(time.time() - self._record_start, 3)
+                kid = _key_id(key)
+                # Use the same key_str from press for consistency
+                key_str = self._held_keys.pop(kid, None)
+                if key_str is None:
+                    key_str = _pynput_key_str(key)
+                if key_str.lower() in hotkeys:
+                    return
+                evt = {"t": t, "type": "key_up", "key": key_str}
+                self.recorded_events.append(evt)
+                self.rec_tree.insert(
+                    "", "end", values=(f"{t}s", "KeyUp", key_str))
+
+            self._kb_listener = pynput_kb.Listener(
+                on_press=on_key_press, on_release=on_key_release)
             self._kb_listener.start()
 
     def _stop_recording(self):
@@ -620,12 +760,25 @@ class AutoClickerPro(ctk.CTk):
             return
         loops = int(self.replay_loops_var.get() or 1)
         speed = float(self.replay_speed.get().replace("x", ""))
+        delay_val = float(self.replay_delay_var.get() or 0)
+        delay_unit = self.replay_delay_unit.get()
+        if delay_unit == "min":
+            delay_val *= 60
+        elif delay_unit == "hr":
+            delay_val *= 3600
+        loop_delay = max(0, delay_val)
 
         def worker():
             self._log(
                 f"Replaying {len(self.recorded_events)} events "
-                f"x {loops} at {speed}x")
-            for _ in range(loops):
+                f"x {loops} at {speed}x"
+                + (f" (delay {delay_val}s between loops)" if loop_delay > 0 else ""))
+            for loop_i in range(loops):
+                if loop_i > 0 and loop_delay > 0:
+                    self._log(f"Waiting {loop_delay}s before next loop...")
+                    end_t = time.time() + loop_delay
+                    while time.time() < end_t and self.running:
+                        time.sleep(0.1)
                 prev_t = 0
                 for evt in self.recorded_events:
                     if not self.running:
@@ -634,15 +787,62 @@ class AutoClickerPro(ctk.CTk):
                     if wait > 0:
                         time.sleep(wait)
                     prev_t = evt["t"]
-                    if evt["type"] == "mouse_click":
+                    etype = evt["type"]
+
+                    if etype == "mouse_click":
                         pyautogui.click(
                             evt["x"], evt["y"],
                             button=evt.get("button", "left"))
-                    elif evt["type"] == "key_press":
+                    elif etype == "mouse_down":
+                        pyautogui.moveTo(evt["x"], evt["y"])
+                        pyautogui.mouseDown(
+                            button=evt.get("button", "left"))
+                    elif etype == "mouse_up":
+                        pyautogui.moveTo(evt["x"], evt["y"])
+                        pyautogui.mouseUp(
+                            button=evt.get("button", "left"))
+                    elif etype == "mouse_move":
+                        pyautogui.moveTo(evt["x"], evt["y"])
+                    elif etype == "mouse_scroll":
+                        clicks = evt.get("dy", 0)
+                        pyautogui.scroll(
+                            clicks, x=evt.get("x"), y=evt.get("y"))
+                    elif etype == "key_down":
+                        try:
+                            pyautogui.keyDown(self._map_key(evt["key"]))
+                        except Exception:
+                            pass
+                    elif etype == "key_up":
+                        try:
+                            pyautogui.keyUp(self._map_key(evt["key"]))
+                        except Exception:
+                            pass
+                    elif etype == "key_press":
                         try:
                             pyautogui.press(evt["key"])
                         except Exception:
                             pyautogui.write(evt["key"])
+                    elif etype == "type_text":
+                        pyautogui.write(
+                            evt.get("text", ""),
+                            interval=float(evt.get("interval", 0.02)))
+                    elif etype == "wait":
+                        time.sleep(float(evt.get("seconds", 1)))
+                    elif etype == "image_click":
+                        img = evt.get("image", "")
+                        conf = float(evt.get("confidence", 0.8))
+                        timeout = float(evt.get("timeout", 10))
+                        deadline = time.time() + timeout
+                        while time.time() < deadline and self.running:
+                            try:
+                                loc = pyautogui.locateCenterOnScreen(
+                                    img, confidence=conf)
+                                if loc:
+                                    pyautogui.click(loc[0], loc[1])
+                                    break
+                            except Exception:
+                                pass
+                            time.sleep(0.5)
                 if not self.running:
                     break
             self.running = False
@@ -675,19 +875,142 @@ class AutoClickerPro(ctk.CTk):
         with open(path) as f:
             self.recorded_events = json.load(f)
         for evt in self.recorded_events:
-            if evt["type"] == "mouse_click":
-                detail = (f"Click ({evt['x']},{evt['y']}) "
-                          f"{evt.get('button', 'left')}")
-            else:
-                detail = evt.get("key", "")
-            self.rec_tree.insert(
-                "", "end",
-                values=(f"{evt['t']}s",
-                        "Mouse" if evt["type"] == "mouse_click" else "Key",
-                        detail))
+            self._rec_tree_insert(evt)
         self._log(
             f"Loaded {len(self.recorded_events)} events "
             f"from {os.path.basename(path)}")
+
+    def _rec_evt_display(self, evt):
+        """Return (type_label, detail) for a recorded event."""
+        etype = evt["type"]
+        if etype == "mouse_click":
+            return "Click", f"({evt['x']},{evt['y']}) {evt.get('button','left')}"
+        elif etype == "mouse_down":
+            return "Down", f"({evt['x']},{evt['y']}) {evt.get('button','left')}"
+        elif etype == "mouse_up":
+            hold = evt.get("hold", 0)
+            return "Up", f"({evt['x']},{evt['y']}) {evt.get('button','left')} held {hold}s"
+        elif etype == "mouse_move":
+            return "Move", f"({evt['x']},{evt['y']})"
+        elif etype == "mouse_scroll":
+            d = "up" if evt.get("dy", 0) > 0 else "down"
+            return "Scroll", f"({evt['x']},{evt['y']}) {d} {abs(evt.get('dy',0))}"
+        elif etype == "key_down":
+            return "KeyDown", evt.get("key", "")
+        elif etype == "key_up":
+            return "KeyUp", evt.get("key", "")
+        elif etype == "key_press":
+            return "Key", evt.get("key", "")
+        elif etype == "type_text":
+            txt = evt.get("text", "")
+            preview = txt[:40] + "..." if len(txt) > 40 else txt
+            return "Type", preview
+        elif etype == "wait":
+            return "Wait", f"{evt.get('seconds', 1)}s"
+        elif etype == "image_click":
+            return "ImgClick", os.path.basename(evt.get("image", ""))
+        return etype, ""
+
+    def _rec_tree_insert(self, evt):
+        label, detail = self._rec_evt_display(evt)
+        self.rec_tree.insert("", "end",
+                             values=(f"{evt['t']}s", label, detail))
+
+    def _rec_last_time(self):
+        if self.recorded_events:
+            return self.recorded_events[-1]["t"]
+        return 0.0
+
+    def _rec_insert_wait(self):
+        dlg = ctk.CTkInputDialog(
+            text="Wait duration (seconds):", title="Insert Wait")
+        val = dlg.get_input()
+        if not val:
+            return
+        try:
+            secs = float(val)
+        except ValueError:
+            return
+        t = round(self._rec_last_time() + 0.01, 3)
+        evt = {"t": t, "type": "wait", "seconds": secs}
+        self.recorded_events.append(evt)
+        self._rec_tree_insert(evt)
+        self._log(f"Inserted wait: {secs}s")
+
+    def _rec_insert_type(self):
+        dlg = ctk.CTkInputDialog(
+            text="Text to type:", title="Insert Type Text")
+        val = dlg.get_input()
+        if not val:
+            return
+        t = round(self._rec_last_time() + 0.01, 3)
+        evt = {"t": t, "type": "type_text", "text": val, "interval": 0.02}
+        self.recorded_events.append(evt)
+        self._rec_tree_insert(evt)
+        self._log(f"Inserted type text: {val[:30]}")
+
+    def _rec_insert_image(self):
+        path = filedialog.askopenfilename(
+            filetypes=[("Images", "*.png *.jpg *.jpeg *.bmp")])
+        if not path:
+            return
+        t = round(self._rec_last_time() + 0.01, 3)
+        evt = {"t": t, "type": "image_click", "image": path,
+               "confidence": 0.8, "timeout": 10}
+        self.recorded_events.append(evt)
+        self._rec_tree_insert(evt)
+        self._log(f"Inserted image click: {os.path.basename(path)}")
+
+    def _rec_insert_scroll(self):
+        dlg = ctk.CTkToplevel(self)
+        dlg.title("Insert Scroll")
+        dlg.geometry("300x200")
+        dlg.resizable(False, False)
+        dlg.grab_set()
+
+        ctk.CTkLabel(dlg, text="Direction:").pack(anchor="w", padx=12, pady=(10, 2))
+        dir_var = ctk.StringVar(value="Down")
+        ctk.CTkOptionMenu(dlg, variable=dir_var,
+                          values=["Up", "Down"], width=120).pack(padx=12, anchor="w")
+
+        ctk.CTkLabel(dlg, text="Scroll amount (clicks):").pack(anchor="w", padx=12, pady=(8, 2))
+        amount_var = ctk.StringVar(value="3")
+        ctk.CTkEntry(dlg, textvariable=amount_var, width=120).pack(padx=12, anchor="w")
+
+        def confirm():
+            try:
+                amount = int(amount_var.get())
+            except ValueError:
+                return
+            dy = amount if dir_var.get() == "Up" else -amount
+            t = round(self._rec_last_time() + 0.01, 3)
+            x, y = pyautogui.position()
+            evt = {"t": t, "type": "mouse_scroll",
+                   "x": x, "y": y, "dx": 0, "dy": dy}
+            self.recorded_events.append(evt)
+            self._rec_tree_insert(evt)
+            direction = "up" if dy > 0 else "down"
+            self._log(f"Inserted scroll: {direction} {abs(dy)}")
+            dlg.destroy()
+
+        ctk.CTkButton(dlg, text="OK", width=100, command=confirm).pack(pady=12)
+
+    def _rec_delete_selected(self):
+        sel = self.rec_tree.selection()
+        if not sel:
+            return
+        items = list(self.rec_tree.get_children())
+        indices = sorted([items.index(s) for s in sel], reverse=True)
+        for idx in indices:
+            self.recorded_events.pop(idx)
+        self._rec_refresh_tree()
+        self._log(f"Deleted {len(indices)} event(s).")
+
+    def _rec_refresh_tree(self):
+        for item in self.rec_tree.get_children():
+            self.rec_tree.delete(item)
+        for evt in self.recorded_events:
+            self._rec_tree_insert(evt)
 
     # ============================================================
     #  Tab 4: Image Click
@@ -1621,6 +1944,30 @@ class AutoClickerPro(ctk.CTk):
         self.log_box.insert("end", f"[{ts}] {msg}\n")
         self.log_box.see("end")
         self.log_box.configure(state="disabled")
+
+    # pynput key names -> pyautogui key names
+    _KEY_MAP = {
+        "ctrl_l": "ctrlleft", "ctrl_r": "ctrlright", "ctrl": "ctrl",
+        "alt_l": "altleft", "alt_r": "altright", "alt": "alt",
+        "alt_gr": "altright",
+        "shift_l": "shiftleft", "shift_r": "shiftright", "shift": "shift",
+        "cmd": "win", "cmd_l": "winleft", "cmd_r": "winright",
+        "caps_lock": "capslock", "num_lock": "numlock",
+        "scroll_lock": "scrolllock",
+        "page_up": "pageup", "page_down": "pagedown",
+        "print_screen": "printscreen",
+        "enter": "enter", "return": "return",
+        "space": "space", "tab": "tab",
+        "backspace": "backspace", "delete": "delete",
+        "up": "up", "down": "down", "left": "left", "right": "right",
+        "home": "home", "end": "end",
+        "esc": "escape", "escape": "escape",
+        "insert": "insert",
+        "menu": "apps",
+    }
+
+    def _map_key(self, key_str):
+        return self._KEY_MAP.get(key_str, key_str)
 
     def _stop(self):
         self.running = False
