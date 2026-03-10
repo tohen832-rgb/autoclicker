@@ -61,6 +61,8 @@ ctk.set_default_color_theme("blue")
 HOTKEY_START_STOP = "F6"
 HOTKEY_RECORD = "F7"
 HOTKEY_PICK = "F8"
+HOTKEY_REPLAY = "F9"
+HOTKEY_STOP = "F10"
 
 MACRO_ACTIONS = [
     "Mouse Click",
@@ -228,6 +230,8 @@ class AutoClickerPro(ctk.CTk):
         ctk.CTkLabel(
             top, text=f"  {HOTKEY_START_STOP} Start/Stop  |  "
                       f"{HOTKEY_RECORD} Record  |  "
+                      f"{HOTKEY_REPLAY} Replay  |  "
+                      f"{HOTKEY_STOP} Stop  |  "
                       f"{HOTKEY_PICK} Pick Coord",
             font=("Consolas", 11), text_color="gray60"
         ).pack(side="left", padx=8, pady=4)
@@ -497,12 +501,12 @@ class AutoClickerPro(ctk.CTk):
             width=200, command=self._toggle_record)
         self.rec_btn.pack(side="left", padx=4)
         ctk.CTkButton(
-            btn, text="Replay", fg_color="#22c55e",
-            hover_color="#16a34a", width=100, command=self._start_replay
+            btn, text=f"Replay ({HOTKEY_REPLAY})", fg_color="#22c55e",
+            hover_color="#16a34a", width=120, command=self._start_replay
         ).pack(side="left", padx=4)
         ctk.CTkButton(
-            btn, text="Stop", fg_color="#ef4444",
-            hover_color="#dc2626", width=100, command=self._stop
+            btn, text=f"Stop ({HOTKEY_STOP})", fg_color="#ef4444",
+            hover_color="#dc2626", width=120, command=self._stop
         ).pack(side="left", padx=4)
 
         rec_opt = ctk.CTkFrame(tab)
@@ -600,7 +604,8 @@ class AutoClickerPro(ctk.CTk):
         self._log("Recording... Press " + HOTKEY_RECORD + " to stop.")
 
         hotkeys = {HOTKEY_START_STOP.lower(), HOTKEY_RECORD.lower(),
-                   HOTKEY_PICK.lower()}
+                   HOTKEY_PICK.lower(), HOTKEY_REPLAY.lower(),
+                   HOTKEY_STOP.lower()}
         rec_clicks = self.rec_click_var.get()
         rec_moves = self.rec_move_var.get()
         rec_scroll = self.rec_scroll_var.get()
@@ -1981,6 +1986,8 @@ class AutoClickerPro(ctk.CTk):
         kb_hotkey.add_hotkey(HOTKEY_START_STOP, self._hotkey_toggle)
         kb_hotkey.add_hotkey(HOTKEY_RECORD, self._toggle_record)
         kb_hotkey.add_hotkey(HOTKEY_PICK, self._pick_coordinate)
+        kb_hotkey.add_hotkey(HOTKEY_REPLAY, self._start_replay)
+        kb_hotkey.add_hotkey(HOTKEY_STOP, self._stop)
 
     def _hotkey_toggle(self):
         if self.running:
