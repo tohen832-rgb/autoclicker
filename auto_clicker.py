@@ -1204,27 +1204,122 @@ class AutoClickerPro(ctk.CTk):
         ctk.CTkButton(launch_f, text="Navigate", width=90,
                       command=self._web_navigate).pack(side="left", padx=4)
 
-        ctk.CTkLabel(
-            tab,
-            text="Script: click | type | keys | wait | scroll "
-                 "| hover | select | screenshot | js",
-            text_color="gray60"
-        ).pack(anchor="w", padx=12, pady=(8, 2))
+        # -- Command Builder --
+        ctk.CTkLabel(tab, text="Command Builder",
+                     font=("Segoe UI", 12, "bold"),
+                     text_color="gray70").pack(anchor="w", padx=12, pady=(8, 2))
 
+        builder_f = ctk.CTkFrame(tab)
+        builder_f.pack(fill="x", padx=12, pady=4)
+
+        ctk.CTkLabel(builder_f, text="Action:").grid(
+            row=0, column=0, padx=4, pady=2, sticky="w")
+        self.web_action_var = ctk.StringVar(value="click")
+        self.web_action_menu = ctk.CTkOptionMenu(
+            builder_f,
+            values=["click", "type", "keys", "clear", "submit",
+                    "wait", "scroll", "hover", "select",
+                    "gettext", "assert", "iframe", "alert",
+                    "screenshot", "js", "navigate",
+                    "back", "forward", "refresh"],
+            variable=self.web_action_var, width=110,
+            command=self._web_builder_update)
+        self.web_action_menu.grid(row=0, column=1, padx=4, pady=2)
+
+        ctk.CTkLabel(builder_f, text="Locator:").grid(
+            row=0, column=2, padx=4, pady=2, sticky="w")
+        self.web_locator_type = ctk.CTkOptionMenu(
+            builder_f, values=["css=", "id=", "name=", "xpath=", "(none)"],
+            width=90)
+        self.web_locator_type.set("css=")
+        self.web_locator_type.grid(row=0, column=3, padx=4, pady=2)
+
+        self.web_selector_var = ctk.StringVar()
+        self.web_selector_entry = ctk.CTkEntry(
+            builder_f, textvariable=self.web_selector_var,
+            placeholder_text="#selector", width=150)
+        self.web_selector_entry.grid(row=0, column=4, padx=4, pady=2)
+
+        ctk.CTkLabel(builder_f, text="Value:").grid(
+            row=0, column=5, padx=4, pady=2, sticky="w")
+        self.web_value_var = ctk.StringVar()
+        self.web_value_entry = ctk.CTkEntry(
+            builder_f, textvariable=self.web_value_var,
+            placeholder_text="text / key / seconds", width=150)
+        self.web_value_entry.grid(row=0, column=6, padx=4, pady=2)
+
+        ctk.CTkButton(
+            builder_f, text="+ Add", width=70,
+            fg_color="#22c55e", hover_color="#16a34a",
+            command=self._web_add_cmd
+        ).grid(row=0, column=7, padx=4, pady=2)
+
+        self.web_pick_btn = ctk.CTkButton(
+            builder_f, text="Pick Element", width=100,
+            fg_color="#f59e0b", hover_color="#d97706",
+            command=self._web_pick_element)
+        self.web_pick_btn.grid(row=0, column=8, padx=4, pady=2)
+
+        # -- Templates --
+        tpl_f = ctk.CTkFrame(tab)
+        tpl_f.pack(fill="x", padx=12, pady=2)
+        ctk.CTkLabel(tpl_f, text="Templates:",
+                     font=("Segoe UI", 11, "bold")).pack(side="left", padx=4)
+        for label, tpl_name in [
+            ("Login", "login"),
+            ("Register", "register"),
+            ("Search", "search"),
+            ("Form Fill", "form_fill"),
+            ("Scrape Text", "scrape"),
+        ]:
+            ctk.CTkButton(
+                tpl_f, text=label, width=80, height=26,
+                font=("Segoe UI", 11),
+                fg_color="#6366f1", hover_color="#4f46e5",
+                command=lambda t=tpl_name: self._web_load_template(t)
+            ).pack(side="left", padx=2)
+
+        # -- Quick Insert Buttons --
+        quick_f = ctk.CTkFrame(tab)
+        quick_f.pack(fill="x", padx=12, pady=2)
+        for label, cmd_text in [
+            ("Click", "click css=#element"),
+            ("Type", "type id=input Hello"),
+            ("Enter", "keys id=input ENTER"),
+            ("Wait 1s", "wait 1.0"),
+            ("Scroll", "scroll 300"),
+            ("Screenshot", "screenshot capture.png"),
+            ("Back", "back"),
+            ("Refresh", "refresh"),
+        ]:
+            ctk.CTkButton(
+                quick_f, text=label, width=75, height=26,
+                font=("Segoe UI", 11),
+                command=lambda t=cmd_text: self._web_insert_line(t)
+            ).pack(side="left", padx=2)
+        ctk.CTkButton(
+            quick_f, text="Clear All", width=75, height=26,
+            font=("Segoe UI", 11),
+            fg_color="#ef4444", hover_color="#dc2626",
+            command=lambda: self.web_script.delete("0.0", "end")
+        ).pack(side="left", padx=2)
+
+        # -- Script Editor --
         self.web_script = ctk.CTkTextbox(tab, font=("Consolas", 11))
         self.web_script.pack(fill="both", expand=True, padx=12, pady=4)
         self.web_script.insert("0.0",
-            "# click  css=#submit-btn         Click element\n"
-            "# type   id=search  Hello World   Type text\n"
-            "# keys   id=search  ENTER          Send key\n"
-            "# wait   2.0                       Pause seconds\n"
-            "# wait   css=#result               Wait for element\n"
-            "# scroll 500                       Scroll pixels\n"
-            "# hover  css=#menu                 Hover element\n"
-            "# select css=#drop  Option Text    Dropdown\n"
-            "# screenshot  capture.png          Save screenshot\n"
-            "# js     document.title            Run JavaScript\n")
+            "# Commands: action  locator  value\n"
+            "# click  css=#submit-btn\n"
+            "# type   id=search  Hello World\n"
+            "# keys   id=search  ENTER\n"
+            "# wait   2.0\n"
+            "# scroll 500\n"
+            "# hover  css=#menu\n"
+            "# select css=#drop  Option Text\n"
+            "# screenshot capture.png\n"
+            "# js     document.title\n")
 
+        # -- Run Controls --
         run_f = ctk.CTkFrame(tab)
         run_f.pack(fill="x", padx=12, pady=(4, 8))
         ctk.CTkButton(
@@ -1244,8 +1339,273 @@ class AutoClickerPro(ctk.CTk):
         self.web_delay_var = ctk.StringVar(value="1.0")
         ctk.CTkEntry(run_f, textvariable=self.web_delay_var, width=50).pack(
             side="left", padx=4)
+        ctk.CTkButton(
+            run_f, text="Save Script", width=90,
+            command=self._web_save_script
+        ).pack(side="left", padx=(12, 4))
+        ctk.CTkButton(
+            run_f, text="Load Script", width=90,
+            command=self._web_load_script
+        ).pack(side="left", padx=4)
 
     # -- Web helpers --
+
+    _PICK_JS = """
+    (function() {
+        if (window.__pickerActive) return 'ALREADY_ACTIVE';
+        window.__pickerActive = true;
+        window.__pickedSelector = null;
+        var overlay = document.createElement('div');
+        overlay.id = '__picker_overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;z-index:999998;cursor:crosshair;';
+        var highlight = document.createElement('div');
+        highlight.id = '__picker_highlight';
+        highlight.style.cssText = 'position:fixed;z-index:999997;pointer-events:none;border:2px solid #f59e0b;background:rgba(245,158,11,0.15);transition:all 0.05s;display:none;';
+        var label = document.createElement('div');
+        label.id = '__picker_label';
+        label.style.cssText = 'position:fixed;z-index:999999;background:#1e293b;color:#f59e0b;font:12px monospace;padding:4px 8px;border-radius:4px;pointer-events:none;display:none;';
+        document.body.appendChild(highlight);
+        document.body.appendChild(label);
+        document.body.appendChild(overlay);
+
+        function bestSelector(el) {
+            if (el.id) return '#' + el.id;
+            if (el.name) return el.tagName.toLowerCase() + '[name="' + el.name + '"]';
+            var cls = Array.from(el.classList).filter(function(c){return c.indexOf('__picker')===-1;});
+            if (cls.length) {
+                var sel = el.tagName.toLowerCase() + '.' + cls.join('.');
+                if (document.querySelectorAll(sel).length === 1) return sel;
+            }
+            var tag = el.tagName.toLowerCase();
+            var parent = el.parentElement;
+            if (!parent) return tag;
+            var siblings = Array.from(parent.children).filter(function(c){return c.tagName===el.tagName;});
+            if (siblings.length === 1) return bestSelector(parent) + ' > ' + tag;
+            var idx = siblings.indexOf(el) + 1;
+            return bestSelector(parent) + ' > ' + tag + ':nth-child(' + idx + ')';
+        }
+
+        overlay.addEventListener('mousemove', function(e) {
+            overlay.style.pointerEvents = 'none';
+            var target = document.elementFromPoint(e.clientX, e.clientY);
+            overlay.style.pointerEvents = 'auto';
+            if (!target || target.id && target.id.startsWith('__picker')) return;
+            var rect = target.getBoundingClientRect();
+            highlight.style.display = 'block';
+            highlight.style.left = rect.left + 'px';
+            highlight.style.top = rect.top + 'px';
+            highlight.style.width = rect.width + 'px';
+            highlight.style.height = rect.height + 'px';
+            var sel = bestSelector(target);
+            label.style.display = 'block';
+            label.textContent = sel;
+            label.style.left = Math.min(e.clientX + 12, window.innerWidth - 300) + 'px';
+            label.style.top = Math.max(e.clientY - 30, 4) + 'px';
+        });
+
+        overlay.addEventListener('click', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            overlay.style.pointerEvents = 'none';
+            var target = document.elementFromPoint(e.clientX, e.clientY);
+            overlay.style.pointerEvents = 'auto';
+            if (target && !(target.id && target.id.startsWith('__picker'))) {
+                window.__pickedSelector = bestSelector(target);
+            }
+            overlay.remove();
+            highlight.remove();
+            label.remove();
+            window.__pickerActive = false;
+        });
+        return 'PICKER_STARTED';
+    })();
+    """
+
+    _PICK_RESULT_JS = "return window.__pickedSelector;"
+
+    def _web_pick_element(self):
+        if not self.web_driver:
+            self._log("Launch a browser first.")
+            return
+        try:
+            result = self.web_driver.execute_script(self._PICK_JS)
+            if result == 'ALREADY_ACTIVE':
+                self._log("Picker already active. Click an element in the browser.")
+                return
+        except Exception as e:
+            self._log(f"Pick error: {e}")
+            return
+
+        self._log("Pick mode ON - click an element in the browser...")
+        self.web_pick_btn.configure(text="Waiting...", state="disabled")
+
+        def poll_pick():
+            for _ in range(300):  # 30 seconds timeout
+                time.sleep(0.1)
+                try:
+                    sel = self.web_driver.execute_script(self._PICK_RESULT_JS)
+                except Exception:
+                    break
+                if sel:
+                    self.after(0, lambda s=sel: self._web_pick_done(s))
+                    return
+            self.after(0, lambda: self._web_pick_done(None))
+
+        threading.Thread(target=poll_pick, daemon=True).start()
+
+    def _web_pick_done(self, selector):
+        self.web_pick_btn.configure(text="Pick Element", state="normal")
+        if selector:
+            self.web_locator_type.set("css=")
+            self.web_selector_var.set(selector)
+            self.web_selector_entry.configure(state="normal")
+            self._log(f"Picked: css={selector}")
+        else:
+            self._log("Pick cancelled or timed out.")
+
+    def _web_builder_update(self, action):
+        needs_locator = action in (
+            "click", "type", "keys", "clear", "submit",
+            "hover", "select", "gettext", "assert", "iframe")
+        no_locator = action in (
+            "wait", "scroll", "screenshot", "js", "navigate",
+            "alert", "back", "forward", "refresh")
+        state = "normal" if needs_locator else "disabled"
+        self.web_selector_entry.configure(state=state)
+        if no_locator:
+            self.web_locator_type.set("(none)")
+        elif self.web_locator_type.get() == "(none)":
+            self.web_locator_type.set("css=")
+
+    def _web_add_cmd(self):
+        action = self.web_action_var.get()
+        loc_type = self.web_locator_type.get()
+        selector = self.web_selector_var.get().strip()
+        value = self.web_value_var.get().strip()
+
+        if action in ("back", "forward", "refresh"):
+            line = action
+        elif action == "navigate":
+            line = f"navigate {value or self.web_url_var.get()}"
+        elif action in ("wait", "scroll"):
+            line = f"{action} {value or selector}"
+        elif action == "screenshot":
+            line = f"screenshot {value or 'capture.png'}"
+        elif action == "js":
+            line = f"js {value}"
+        elif action == "alert":
+            line = f"alert {value or 'accept'}"
+        elif action == "iframe":
+            locator = "" if loc_type == "(none)" else f"{loc_type}{selector}"
+            line = f"iframe {locator}" if locator else "iframe default"
+        else:
+            locator = "" if loc_type == "(none)" else f"{loc_type}{selector}"
+            if not locator:
+                self._log("Please enter a selector.")
+                return
+            if value:
+                line = f"{action} {locator} {value}"
+            else:
+                line = f"{action} {locator}"
+
+        self._web_insert_line(line)
+
+    _WEB_TEMPLATES = {
+        "login": (
+            "# === Login Template ===\n"
+            "# Edit the selectors & values below to match your site\n"
+            "navigate https://example.com/login\n"
+            "wait 1.0\n"
+            "type id=username your_username\n"
+            "type id=password your_password\n"
+            "click css=button[type=submit]\n"
+            "wait 2.0\n"
+            "screenshot login_result.png\n"
+        ),
+        "register": (
+            "# === Register Template ===\n"
+            "# Edit the selectors & values below to match your site\n"
+            "navigate https://example.com/register\n"
+            "wait 1.0\n"
+            "type id=firstname John\n"
+            "type id=lastname Doe\n"
+            "type id=email john@example.com\n"
+            "type id=username johndoe\n"
+            "type id=password MyPassword123\n"
+            "type id=confirm_password MyPassword123\n"
+            "click css=input[type=checkbox]\n"
+            "click css=button[type=submit]\n"
+            "wait 2.0\n"
+            "screenshot register_result.png\n"
+        ),
+        "search": (
+            "# === Search Template ===\n"
+            "navigate https://example.com\n"
+            "wait 1.0\n"
+            "type name=q search term here\n"
+            "keys name=q ENTER\n"
+            "wait 2.0\n"
+            "screenshot search_result.png\n"
+        ),
+        "form_fill": (
+            "# === Form Fill Template ===\n"
+            "navigate https://example.com/form\n"
+            "wait 1.0\n"
+            "type id=name John Doe\n"
+            "type id=email john@example.com\n"
+            "type id=phone 0123456789\n"
+            "type id=address 123 Main St\n"
+            "select id=country Thailand\n"
+            "click css=input[type=radio][value=male]\n"
+            "click css=input[type=checkbox]#agree\n"
+            "click css=button[type=submit]\n"
+            "wait 2.0\n"
+            "screenshot form_result.png\n"
+        ),
+        "scrape": (
+            "# === Scrape Text Template ===\n"
+            "navigate https://example.com\n"
+            "wait 1.0\n"
+            "gettext css=h1\n"
+            "gettext css=.price\n"
+            "gettext css=.description\n"
+            "screenshot scraped_page.png\n"
+        ),
+    }
+
+    def _web_load_template(self, name):
+        tpl = self._WEB_TEMPLATES.get(name, "")
+        if tpl:
+            self.web_script.delete("0.0", "end")
+            self.web_script.insert("0.0", tpl)
+            self._log(f"Template '{name}' loaded. Edit selectors to match your site.")
+
+    def _web_insert_line(self, text):
+        content = self.web_script.get("0.0", "end").strip()
+        if content and not content.endswith("\n"):
+            self.web_script.insert("end", "\n")
+        self.web_script.insert("end", text + "\n")
+
+    def _web_save_script(self):
+        from tkinter import filedialog
+        path = filedialog.asksaveasfilename(
+            defaultextension=".txt",
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+        if path:
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(self.web_script.get("0.0", "end").strip())
+            self._log(f"Script saved: {path}")
+
+    def _web_load_script(self):
+        from tkinter import filedialog
+        path = filedialog.askopenfilename(
+            filetypes=[("Text files", "*.txt"), ("All files", "*.*")])
+        if path:
+            with open(path, "r", encoding="utf-8") as f:
+                content = f.read()
+            self.web_script.delete("0.0", "end")
+            self.web_script.insert("0.0", content)
+            self._log(f"Script loaded: {path}")
 
     def _web_launch(self):
         if self.web_driver:
@@ -1348,6 +1708,11 @@ class AutoClickerPro(ctk.CTk):
         return WebDriverWait(self.web_driver, timeout).until(
             EC.presence_of_element_located((by, val)))
 
+    def _web_find_clickable(self, locator, timeout=10):
+        by, val = self._web_parse_locator(locator)
+        return WebDriverWait(self.web_driver, timeout).until(
+            EC.element_to_be_clickable((by, val)))
+
     def _web_key(self, name):
         mapping = {
             "ENTER": Keys.ENTER, "RETURN": Keys.RETURN,
@@ -1373,9 +1738,19 @@ class AutoClickerPro(ctk.CTk):
         cmd = parts[0].lower()
 
         if cmd == "click":
-            self._web_find(parts[1]).click()
+            el = self._web_find_clickable(parts[1])
+            self.web_driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});", el)
+            time.sleep(0.3)
+            try:
+                el.click()
+            except Exception:
+                self.web_driver.execute_script("arguments[0].click();", el)
         elif cmd == "type":
-            el = self._web_find(parts[1])
+            el = self._web_find_clickable(parts[1])
+            self.web_driver.execute_script(
+                "arguments[0].scrollIntoView({block:'center'});", el)
+            el.click()
             el.clear()
             el.send_keys(parts[2] if len(parts) > 2 else "")
         elif cmd == "keys":
@@ -1406,6 +1781,55 @@ class AutoClickerPro(ctk.CTk):
             script = line[2:].strip()
             result = self.web_driver.execute_script(f"return {script}")
             self._log(f"JS: {result}")
+        elif cmd == "navigate":
+            url = parts[1] if len(parts) > 1 else ""
+            if url:
+                self.web_driver.get(url)
+                self._log(f"Navigated to {url}")
+        elif cmd == "clear":
+            self._web_find(parts[1]).clear()
+        elif cmd == "submit":
+            self._web_find(parts[1]).submit()
+        elif cmd == "gettext":
+            el = self._web_find(parts[1])
+            text = el.text
+            self._log(f"Text: {text}")
+        elif cmd == "assert":
+            el = self._web_find(parts[1])
+            expected = parts[2] if len(parts) > 2 else ""
+            actual = el.text
+            if expected and expected not in actual:
+                self._log(f"ASSERT FAIL: expected '{expected}' in '{actual}'")
+                self.running = False
+                return
+            self._log(f"ASSERT OK: '{actual}'")
+        elif cmd == "iframe":
+            arg = parts[1] if len(parts) > 1 else "default"
+            if arg == "default":
+                self.web_driver.switch_to.default_content()
+                self._log("Switched to main page")
+            else:
+                frame = self._web_find(arg)
+                self.web_driver.switch_to.frame(frame)
+                self._log(f"Switched to iframe: {arg}")
+        elif cmd == "alert":
+            action = parts[1] if len(parts) > 1 else "accept"
+            alert = WebDriverWait(self.web_driver, 5).until(
+                EC.alert_is_present())
+            self._log(f"Alert text: {alert.text}")
+            if action == "dismiss":
+                alert.dismiss()
+            else:
+                alert.accept()
+        elif cmd == "back":
+            self.web_driver.back()
+            self._log("Navigated back")
+        elif cmd == "forward":
+            self.web_driver.forward()
+            self._log("Navigated forward")
+        elif cmd == "refresh":
+            self.web_driver.refresh()
+            self._log("Page refreshed")
         else:
             self._log(f"Unknown web cmd: {cmd}")
 
